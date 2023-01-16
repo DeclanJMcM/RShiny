@@ -1,0 +1,201 @@
+---
+title: "UFC Social Media Analysis"
+runtime: shiny
+output:
+  flexdashboard::flex_dashboard:
+    orientation: rows
+    vertical_layout: fill
+    social: menu
+    theme: united
+resource_files:
+- Network_#ufc_rq.gml
+---
+
+```{r global, include=FALSE}
+library(flexdashboard)
+library(rtweet)
+library(leaflet)
+library(quanteda)
+library(quanteda.textstats)
+library(quanteda.textplots)
+library(igraph)
+library(visNetwork)
+library(scales)
+library(highcharter)
+library(lubridate)
+library(reshape2)
+library(dplyr)
+library(syuzhet) 
+library(stringr)
+library(tidyr)
+library(DT)
+
+load(file="ufc_tweets.rda")
+load(file="sentiments_ufc2.rda")
+
+```
+
+Inputs {.sidebar}
+====================================================================
+
+```{r}
+h5("Data updated:", Sys.Date())
+
+checkboxGroupInput("sentiment1", 
+                   label = (helpText(h5("Choose sentiments"))),
+                    choices = list("Anger" = "anger", 
+                    "Anticipation" = "anticipation",
+                    "Disgust" = "disgust",
+                    "Fear" = "fear",
+                    "Joy" = "joy", 
+                    "Sadness" = "sadness", 
+                    "Surprise" = "surprise",
+                    "Trust" = "trust"),
+                   selected = list("surprise","trust","anger"))
+
+selectInput("language", label = (helpText(h5(strong("Choose a language")))),
+            choices = list("English" = "en",
+                           "French" = "fr",
+                           "Spanish" = "es",
+                           "German" = "de",
+                           "Chinese" = "zh",
+                           "Arabic" = "ar",
+                           "Russian" = "ru",
+                           "Turkish" = "tr"),
+            selected = "en"
+)
+
+
+```
+Project Explanation {data-orientation=scroll data-icon="fa-bar-chart"}
+=======================================================================
+### **The Purpose of This Project**
+
+
+The purpose of this project was to analyze different ways the UFC is interacted with on social media platforms, primarily twitter and YouTube. Using R, I collected thousands of tweets based on the hashtag #UFC to analyze the different emotions of each tweet (sentiment), create a retweet semantic network, a hashtags network, as well as a geomap based on users geolocation. I also used the #UFC in order to create a YouTube network in order to analyze which channels related the UFC are most popular, and most likely to be recommended to UFC fans. 
+
+Key findings of mine were the most popular sentiment corresponding to UFC tweets was trust, because they are a very transparent company to the public and always keep their fans informed. The twitter hashtags network was split into four distinct groups: Wrestling, Fighting, Betting, and UFC topics like events and fighters / analysts. The geomap showed the only tweets with geolcations came from the United States because the US is the largest hub in the world for MMA fans, so it makes sense all the geolocations came from here. Lastly, the YouTube network showed the most recommended channels based off of the viewers of the UFC's own channel, were channels that focused on daily UFC News, and well as channels that analyze fights and interview fighters, which common fans are very interested in watching. 
+
+Some limitations of this project were the majority of tweets do not contain geolocations so although there are also many fans of the UFC in other countries, these users did not show up on our geomap. The sentiment analysis was only based on one week, and can vary depending on recent UFC events. Sometimes fans may be more angered due to a controversial fight, while other times they are very joyful from watching a fan favorite. 
+
+Twitter Sentiments {data-orientation=scroll data-icon="fa-bar-chart"}
+=======================================================================
+
+### 
+###
+
+### **Introducing Sentiment Analysis**
+
+Sentiment analysis is a form of data collection meant to detect, classify, and rate the different emotions in text, here we are analyzing the different emotions in tweets on the topic of the UFC (A professional MMA league). The sentiment detection algorithm detects *anger*, *sadness*, *joy*, *trust*, *surprise*, *fear*, *anticipation*, and *disgust*. As the sentiments clearly shows below, the sentiments are typically of trusting emotions, however occasionally there is anger amongst the UFC fans when there is occasionally a controversial decision by judges, where a fighter the general public beleives won a fight, actually loses on the official judges scorecards. Another common sentiment is surprise because there are often shocking and exciting upsets that occur in the sport.But in the end, on average, UFC fans are typically very loyal and trusting of the organization, as the sentiments below primarily show the trust sentiment. 
+
+### Row 1 {data-height=110}
+-----------------------------------------------------------------------
+
+```{r}
+
+sentiment$created_at <- as.Date(sentiment$created_at)
+
+output$chart <- renderHighchart({
+
+  highchart() %>%
+    hc_add_series(data= sentiment[sentiment$variable %in% input$sentiment1,],"line", hcaes(x = created_at, y = value,                                                                 group=variable)) %>%
+hc_xAxis(type = "datetime")
+
+})
+
+highchartOutput('chart')
+
+```
+YouTube Network {data-orientation=scroll data-icon="fa-bar-chart"}
+=======================================================================
+
+### **Introducing YouTube Network**
+
+The meaning of each branching node in a YouTube network means those channels are similar to the main channel they are connected to and most likely to be recommend by the recommendation algorithm to users watching UFC videos due to their popularity and similarity to the videos they are consuming. In this UFC network below the largest node by far is the UFC's own YouTube Channel which is extremely popular posting reruns of previous fights, as well as athletes training lead up to fights, and press conferences to further promote each fight. The other larger nodes branching off from the UFC's channel are Vote Sport, BTSports, and Full Mount MMA, because they are the next most popular and similar channels also covering UFC events and news, making them the most likely channels to be recommended to users watching UFC videos. 
+```{r}
+library(readgdf)
+library(visNetwork)
+library(scales)
+
+nx <- read_gdf("videonet_channels_search459_nodes342_2022_12_09-00_42_59.gdf",as_igraph = TRUE)
+
+V(nx)$size <- degree(nx,mode = "in")  
+
+wc <- cluster_walktrap(nx)
+V(nx)$color <- membership(wc) # set color by subgroup id
+
+visIgraph(nx,idToLabel = TRUE,layout = "layout_nicely") %>%
+  visOptions(highlightNearest = TRUE, nodesIdSelection = TRUE) 
+```
+Retweet Semantic Network {data-orientation=scroll data-icon="fa-bar-chart"}
+=======================================================================
+
+### **Introducing Semantic Network**
+
+A Semantic Network is defined as a mathematical view of relationships and social structures, this network is an example of a twitter re-tweeting network based on the #UFC. The meaning of each node connection is based on twitter friendships, followings, and re-tweets. This network contains 1103 nodes and 953 edges. The nodes represent twitter users, and the edges represent the re-tweet relationship. The largest nodes below are from channels like MMAJunkie, and TheMMA_Media because these are extremely popular MMA channels on Twitter. The corresponding nodes that are connected to these more popular channels are the ones re-tweeting and interacting with these more popular tweets.        
+
+```{r}
+nx <- read_graph("Network_#ufc_rq.gml",format = c("gml"))
+
+wc <- cluster_walktrap(nx)
+V(nx)$color <- membership(wc) # set color by subgroup id
+
+kcore <- coreness(nx, mode="all") 
+threecore <- induced_subgraph(nx, kcore>=3)
+
+visIgraph(threecore,idToLabel = TRUE,layout = "layout_nicely") %>%
+  visOptions(highlightNearest = TRUE, nodesIdSelection = TRUE)
+
+```
+
+Twitter Hashtags {data-orientation=scroll data-icon="fa-bar-chart"}
+=======================================================================
+
+### **Introducing Hashtag Network**
+
+Hashtag word map is based around #UFC in the center, and branches off into subcategories based off of this primary topic. So as we can see below #UFC branches out into about 4 subcategories, first we have the hashtags that are directly related to the UFC, containing phrases ranging from UFC events like UFC282, to UFC fighters like Paddy Piblett, as well as the UFC owner, Dana White, and a UFC analyst, Ariel Helwani. Another grouping has hashtags focused around sports betting, as well as other popular sports to bet on. So this section includes hashtags like sportsgambling, draftkings, fanduel, and gamblingtwiter. As well as other similarly popular sports like NFL, NBA, NHL, and Soccer. We also see a section that strictly focuses on wrestling, containing phraes like WWE, wrestlingtwitter, and prowrestling. While the last section of hashtags grouped seem to have a primary focus around fighting, including phrases like streetfights, knockout, and schoolfights. All of these topics have a strong relation to the UFC and MMA community, while also being properly grouped into their own subcategory, surrounded by the other similar and relevant topics basedon the UFC.  
+
+```{r}
+renderPlot({
+  corpus <- corpus(tweets[tweets$lang == input$language,],docid_field = "id",text_field = "full_text")
+  
+  tweets_dfm <- tokens(corpus, remove_punct = TRUE, remove_numbers = TRUE, remove_symbols = TRUE, remove_url=TRUE) %>%  
+  dfm()
+  
+  tag_dfm <- dfm_select(tweets_dfm, pattern = "#*")
+  toptag <- names(topfeatures(tag_dfm, 100))
+  tag_fcm <- fcm(tag_dfm)
+  topgat_fcm <- fcm_select(tag_fcm, pattern = toptag)
+  textplot_network(topgat_fcm, min_freq = 0.1, edge_alpha = 0.5, edge_size = 1, edge_color = "orange")
+
+})
+
+```
+
+Twitter GeoMap {data-orientation=scroll data-icon="fa-bar-chart"}
+=======================================================================
+
+### **Introducing GeoMap**
+
+This is a tweet GeoMap which shows the location of specific tweets that include a geolocation. As we can see below all of the available tweets we analyzed with a geolocation were located in the United States. This is likely because the vast majority of MMA fans around the world are located in the US, and it is known as the "epicenter of the MMA world". So the largest amount of tweets about the UFC are likely coming from Americans, resulting in our geomap only containing tweets sent out from the United States, although it is a fast growing sport around the world, and if we analyze this data again in the near future, it is likely this popularity spreads to other locations around the world. 
+
+```{r}
+
+renderLeaflet({
+  geocodes <- lat_lng(tweets[tweets$lang == input$language,])
+  geocodes <- geocodes[!is.na(geocodes$lat),]
+
+  map <- leaflet(data = geocodes) %>% 
+  addTiles() %>%
+  setView(lng = 39, lat = 34, zoom = 2) %>% 
+  addMarkers(lng = ~lng, lat = ~lat,popup = ~ as.character(text)) %>% 
+  addProviderTiles(providers$Esri.NatGeoWorldMap) %>% #select basemap template
+  addCircleMarkers(stroke = FALSE, fillOpacity = 0.2) 
+  
+  map
+
+})
+
+
+```
+
